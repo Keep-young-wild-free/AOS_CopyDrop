@@ -278,7 +278,7 @@ fun MainScreen(viewModel: MainViewModel) {
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("BLE 스캔 중...", style = MaterialTheme.typography.titleMedium)
                     } else {
-                        Icon(Icons.Default.Bluetooth, contentDescription = null, modifier = Modifier.size(24.dp))
+                        Icon(Icons.Default.ConnectWithoutContact, contentDescription = null, modifier = Modifier.size(24.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("BLE로 Mac 연결", style = MaterialTheme.typography.titleMedium)
                     }

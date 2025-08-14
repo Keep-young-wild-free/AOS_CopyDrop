@@ -1,34 +1,36 @@
 package com.copydrop.android.service
 
 import android.app.Notification
-import android.app.PendingIntent
 import android.app.Service
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.copydrop.android.CopyDropApplication
-import com.copydrop.android.MainActivity
-import com.copydrop.android.R
-import com.copydrop.android.data.ClipboardData
-import com.copydrop.android.data.DeviceInfo
-import com.copydrop.android.network.NetworkManager
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.collect
-import java.util.*
+import com.copydrop.android.network.WebSocketManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import java.security.MessageDigest
 
 /**
- * 클립보드 동기화를 담당하는 포어그라운드 서비스
+ * Mac CopyDrop과 호환되는 WebSocket 기반 클립보드 동기화 서비스
  */
 class ClipboardSyncService : Service() {
     
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private lateinit var webSocketManager: WebSocketManager
     private lateinit var clipboardManager: ClipboardManager
-    private lateinit var networkManager: NetworkManager
+    
     private var isServiceRunning = false
-    private var deviceId: String = ""
+    private var lastClipboardHash: String? = null
     
     companion object {
-        private const val SYNC_INTERVAL = 2000L // 2초마다 동기화 확인
         const val ACTION_START_SYNC = "start_sync"
         const val ACTION_STOP_SYNC = "stop_sync"
         const val EXTRA_MAC_ADDRESS = "mac_address"
@@ -37,9 +39,35 @@ class ClipboardSyncService : Service() {
     
     override fun onCreate() {
         super.onCreate()
-        clipboardManager = ClipboardManager(this)
-        networkManager = NetworkManager(this)
-        deviceId = generateDeviceId()
+        webSocketManager = WebSocketManager(this)
+        clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        
+        // 클립보드 변경 리스너 등록
+        clipboardManager.addPrimaryClipChangedListener {
+            handleClipboardChange()
+        }
+        
+        // WebSocket으로 받은 클립보드 데이터 처리
+        serviceScope.launch {
+            webSocketManager.receivedClipboard.collect { clipboardText ->
+                if (clipboardText != null) {
+                    setClipboard(clipboardText)
+                }
+            }
+        }
+        
+        // 연결 상태 모니터링
+        serviceScope.launch {
+            webSocketManager.connectionState.collect { state ->
+                val statusText = when (state) {
+                    WebSocketManager.ConnectionState.DISCONNECTED -> "연결 끊김"
+                    WebSocketManager.ConnectionState.CONNECTING -> "연결 중..."
+                    WebSocketManager.ConnectionState.CONNECTED -> "Mac과 연결됨"
+                    WebSocketManager.ConnectionState.RECONNECTING -> "재연결 시도 중..."
+                }
+                updateNotification(statusText)
+            }
+        }
     }
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -72,7 +100,7 @@ class ClipboardSyncService : Service() {
     }
     
     /**
-     * 동기화 시작
+     * WebSocket 연결 및 동기화 시작
      */
     private fun startSync(macAddress: String, macPort: Int) {
         if (isServiceRunning) return
@@ -80,17 +108,7 @@ class ClipboardSyncService : Service() {
         serviceScope.launch {
             try {
                 isServiceRunning = true
-                networkManager.setMacServerAddress(macAddress, macPort)
-                
-                // 기기 등록
-                registerDevice()
-                
-                // 클립보드 모니터링 시작
-                clipboardManager.startMonitoring()
-                
-                // 동기화 루프 시작
-                startSyncLoop()
-                
+                webSocketManager.connect(macAddress, macPort)
             } catch (e: Exception) {
                 e.printStackTrace()
                 updateNotification("연결 실패: ${e.message}")
@@ -99,69 +117,34 @@ class ClipboardSyncService : Service() {
     }
     
     /**
-     * 기기 등록
+     * 동기화 중지
      */
-    private suspend fun registerDevice() {
-        try {
-            val deviceInfo = DeviceInfo(
-                deviceId = deviceId,
-                deviceName = android.os.Build.MODEL,
-                deviceType = "android",
-                ipAddress = getLocalIpAddress() ?: "",
-                port = 0 // 안드로이드는 클라이언트만 동작
-            )
-            
-            val api = networkManager.getApi()
-            val response = api?.registerDevice(deviceInfo)
-            
-            if (response?.isSuccessful == true) {
-                updateNotification("Mac과 연결됨")
-            } else {
-                updateNotification("등록 실패")
-            }
-        } catch (e: Exception) {
-            updateNotification("등록 오류: ${e.message}")
+    private fun stopSync() {
+        isServiceRunning = false
+        webSocketManager.disconnect()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
         }
+        stopSelf()
     }
     
     /**
-     * 동기화 루프
+     * 클립보드 변경 처리
      */
-    private suspend fun startSyncLoop() {
-        // 로컬 클립보드 변경 감지 및 전송
-        serviceScope.launch {
-            clipboardManager.clipboardData.collect { clipboardData ->
-                if (clipboardData != null) {
-                    sendClipboardToMac(clipboardData)
-                }
-            }
-        }
-        
-        // Mac으로부터 클립보드 데이터 수신
-        serviceScope.launch {
-            while (isServiceRunning) {
-                try {
-                    receiveClipboardFromMac()
-                    delay(SYNC_INTERVAL)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    delay(SYNC_INTERVAL * 2) // 오류 시 더 긴 간격
-                }
-            }
-        }
-    }
-    
-    /**
-     * Mac으로 클립보드 데이터 전송
-     */
-    private suspend fun sendClipboardToMac(clipboardData: ClipboardData) {
+    private fun handleClipboardChange() {
         try {
-            val api = networkManager.getApi() ?: return
-            val dataWithDeviceId = clipboardData.copy(deviceId = deviceId)
-            val response = api.sendClipboard(dataWithDeviceId)
+            val clip = clipboardManager.primaryClip
+            val text = clip?.getItemAt(0)?.coerceToText(this)?.toString()
             
-            if (response.isSuccessful) {
-                updateNotification("클립보드 전송됨")
+            if (!text.isNullOrEmpty()) {
+                val hash = sha256(text)
+                if (hash != lastClipboardHash) {
+                    lastClipboardHash = hash
+                    webSocketManager.sendClipboard(text)
+                }
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -169,110 +152,55 @@ class ClipboardSyncService : Service() {
     }
     
     /**
-     * Mac으로부터 클립보드 데이터 수신
+     * 클립보드에 텍스트 설정
      */
-    private suspend fun receiveClipboardFromMac() {
+    private fun setClipboard(text: String) {
         try {
-            val api = networkManager.getApi() ?: return
-            val response = api.getClipboard()
-            
-            if (response.isSuccessful) {
-                val clipboardData = response.body()
-                if (clipboardData != null && clipboardData.deviceId != deviceId) {
-                    // 다른 기기에서 온 데이터만 적용
-                    clipboardManager.setClipboardContent(clipboardData.content)
-                    updateNotification("클립보드 수신됨")
-                }
+            val hash = sha256(text)
+            if (hash != lastClipboardHash) {
+                lastClipboardHash = hash
+                val clip = ClipData.newPlainText("CopyDrop", text)
+                clipboardManager.setPrimaryClip(clip)
             }
         } catch (e: Exception) {
-            // 연결 오류는 로그만 남기고 계속 시도
-        }
-    }
-    
-    /**
-     * 동기화 중지
-     */
-    private fun stopSync() {
-        serviceScope.launch {
-            try {
-                // 기기 등록 해제
-                val api = networkManager.getApi()
-                api?.unregisterDevice(deviceId)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            } finally {
-                isServiceRunning = false
-                clipboardManager.stopMonitoring()
-                networkManager.cleanup()
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
-            }
+            e.printStackTrace()
         }
     }
     
     /**
      * 알림 생성
      */
-    private fun createNotification(content: String): Notification {
-        val intent = Intent(this, MainActivity::class.java)
-        val pendingIntent = PendingIntent.getActivity(
-            this, 0, intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        
+    private fun createNotification(text: String): Notification {
         return NotificationCompat.Builder(this, CopyDropApplication.CLIPBOARD_SYNC_CHANNEL_ID)
             .setContentTitle("CopyDrop")
-            .setContentText(content)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setContentIntent(pendingIntent)
+            .setContentText(text)
+            .setSmallIcon(android.R.drawable.stat_sys_upload)
             .setOngoing(true)
-            .setSilent(true)
             .build()
     }
     
     /**
      * 알림 업데이트
      */
-    private fun updateNotification(content: String) {
-        val notification = createNotification(content)
-        val notificationManager = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
+    private fun updateNotification(text: String) {
+        val notification = createNotification(text)
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
         notificationManager.notify(CopyDropApplication.CLIPBOARD_SYNC_NOTIFICATION_ID, notification)
     }
     
     /**
-     * 기기 ID 생성
+     * SHA-256 해시 계산
      */
-    private fun generateDeviceId(): String {
-        return "android_" + UUID.randomUUID().toString().substring(0, 8)
-    }
-    
-    /**
-     * 로컬 IP 주소 가져오기
-     */
-    private fun getLocalIpAddress(): String? {
-        return try {
-            val interfaces = java.net.NetworkInterface.getNetworkInterfaces()
-            while (interfaces.hasMoreElements()) {
-                val networkInterface = interfaces.nextElement()
-                val addresses = networkInterface.inetAddresses
-                
-                while (addresses.hasMoreElements()) {
-                    val address = addresses.nextElement()
-                    if (!address.isLoopbackAddress && address.hostAddress?.contains(":") == false) {
-                        return address.hostAddress
-                    }
-                }
-            }
-            null
-        } catch (e: Exception) {
-            null
-        }
+    private fun sha256(text: String): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(text.toByteArray(Charsets.UTF_8))
+        val hex = digest.joinToString("") { String.format("%02x", it) }
+        return "sha256:$hex"
     }
     
     override fun onDestroy() {
         super.onDestroy()
-        isServiceRunning = false
+        webSocketManager.cleanup()
         serviceScope.cancel()
-        networkManager.cleanup()
     }
 }

@@ -56,10 +56,9 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     
-    // Network
+    // Network - WebSocket
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("com.squareup.retrofit2:retrofit:2.9.0")
-    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+    implementation("org.json:json:20230227")
     
     // ViewModel and LiveData
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
@@ -74,7 +73,8 @@ dependencies {
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     
-    // Network scanning (removed jmdns dependency)
+    // Bonjour/mDNS 서비스 발견
+    implementation("org.jmdns:jmdns:3.5.12")
     
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

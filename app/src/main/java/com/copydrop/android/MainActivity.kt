@@ -3,6 +3,7 @@ package com.copydrop.android
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -23,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.copydrop.android.ui.theme.CopyDropTheme
 import com.copydrop.android.ui.viewmodel.MainViewModel
+import com.copydrop.android.service.ClipboardSyncService
 
 class MainActivity : ComponentActivity() {
     
@@ -38,6 +40,14 @@ class MainActivity : ComponentActivity() {
         } else {
             // 권한이 거부되면 사용자에게 안내
         }
+    }
+    
+    private fun startClipboardSyncService(macAddress: String, port: Int) {
+        val serviceIntent = Intent(this, ClipboardSyncService::class.java)
+        serviceIntent.action = ClipboardSyncService.ACTION_START_SYNC
+        serviceIntent.putExtra(ClipboardSyncService.EXTRA_MAC_ADDRESS, macAddress)
+        serviceIntent.putExtra(ClipboardSyncService.EXTRA_MAC_PORT, port)
+        ContextCompat.startForegroundService(this, serviceIntent)
     }
     
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -267,13 +277,15 @@ fun MainScreen(viewModel: MainViewModel) {
                             onClick = {
                                 val port = macPortInput.toIntOrNull() ?: 8080
                                 viewModel.setMacServerAddress(macAddressInput, port)
+                                
+                                // WebSocket 서비스 시작 (추후 자동 검색 성공 시 구현)
                             },
                             modifier = Modifier.weight(1f),
                             enabled = macAddressInput.isNotBlank()
                         ) {
                             Icon(Icons.Default.Settings, contentDescription = null)
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("수동 설정")
+                            Text("수동 연결")
                         }
                     }
                 }

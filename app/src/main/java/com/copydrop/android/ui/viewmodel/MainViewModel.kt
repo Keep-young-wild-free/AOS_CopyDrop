@@ -54,10 +54,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
             
             try {
-                // 현재 네트워크 정보 표시
                 val localIp = networkManager.getLocalIpAddress()
+                
+                // 1단계: Bonjour/mDNS로 정확한 검색 (5초)
                 _uiState.value = _uiState.value.copy(
-                    statusMessage = "네트워크 스캔 중... (내 IP: $localIp)"
+                    statusMessage = "🎯 Bonjour로 Mac CopyDrop 검색 중... (내 IP: $localIp)"
+                )
+                
+                val bonjourResult = networkManager.findServerByBonjour()
+                if (bonjourResult != null) {
+                    _uiState.value = _uiState.value.copy(
+                        isDiscovering = false,
+                        macServerAddress = bonjourResult,
+                        statusMessage = "✨ Mac CopyDrop 발견! $bonjourResult (Bonjour 서비스)"
+                    )
+                    return@launch
+                }
+                
+                // 2단계: UDP 브로드캐스트로 빠른 검색 (3초)
+                _uiState.value = _uiState.value.copy(
+                    statusMessage = "🔊 브로드캐스트로 Mac 찾는 중..."
+                )
+                
+                val broadcastResult = networkManager.findServerByBroadcast()
+                if (broadcastResult != null) {
+                    _uiState.value = _uiState.value.copy(
+                        isDiscovering = false,
+                        macServerAddress = broadcastResult,
+                        statusMessage = "✨ Mac 서버 발견! $broadcastResult (브로드캐스트)"
+                    )
+                    return@launch
+                }
+                
+                // 3단계: 마지막 수단으로 IP 스캔
+                _uiState.value = _uiState.value.copy(
+                    statusMessage = "🔍 주변 네트워크 스캔 중..."
                 )
                 
                 val result = networkManager.startDiscoveryWithDetails()
@@ -65,12 +96,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     _uiState.value = _uiState.value.copy(
                         isDiscovering = false,
                         macServerAddress = result.address!!,
-                        statusMessage = "Mac 서버 발견! ${result.address}:${result.port} (${result.scannedCount}개 위치 검색함)"
+                        statusMessage = "🎯 Mac 서버 발견! ${result.address}:${result.port} (${result.scannedCount}개 위치 검색)"
                     )
                 } else {
                     _uiState.value = _uiState.value.copy(
                         isDiscovering = false,
-                        statusMessage = "Mac 서버를 찾을 수 없음 (${result.scannedCount}개 위치 검색함). 고급 설정에서 수동 입력하세요."
+                        statusMessage = "❌ Mac 서버를 찾을 수 없음. Mac에서 CopyDrop이 실행 중이고 같은 WiFi에 연결되어 있는지 확인하거나 고급 설정을 사용하세요."
                     )
                 }
             } catch (e: Exception) {
@@ -122,7 +153,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             
             try {
                 // 서버 연결 확인
-                val isConnected = networkManager.isServerConnected()
+                val isConnected = false // WebSocket 상태로 대체 예정
                 if (isConnected) {
                     // 동기화 서비스 시작
                     val intent = Intent(getApplication(), ClipboardSyncService::class.java).apply {
@@ -173,7 +204,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshConnectionStatus() {
         checkWifiConnection()
         viewModelScope.launch {
-            val isServerConnected = networkManager.isServerConnected()
+            val isServerConnected = false // WebSocket 상태로 대체 예정
             _uiState.value = _uiState.value.copy(
                 isConnected = isServerConnected,
                 statusMessage = if (isServerConnected) "서버에 연결됨" else "서버 연결 끊김"

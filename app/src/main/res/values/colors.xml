@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    
+    <!-- CopyDrop 브랜드 컬러 -->
+    <color name="copydrop_primary">#FF2196F3</color>
+    <color name="copydrop_secondary">#FF03DAC6</color>
+    <color name="copydrop_error">#FFB00020</color>
+    <color name="copydrop_success">#FF4CAF50</color>
+    <color name="copydrop_warning">#FFFF9800</color>
+</resources>

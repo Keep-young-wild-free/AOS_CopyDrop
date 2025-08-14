@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">CopyDrop</string>
+    
+    <!-- 메인 화면 -->
+    <string name="app_title">CopyDrop</string>
+    <string name="app_subtitle">Mac과 클립보드 공유</string>
+    
+    <!-- 연결 상태 -->
+    <string name="status_connected">연결됨</string>
+    <string name="status_wifi_connected">Wi-Fi 연결됨</string>
+    <string name="status_wifi_disconnected">Wi-Fi 연결 안됨</string>
+    <string name="status_server_not_found">Mac 서버를 찾을 수 없습니다</string>
+    
+    <!-- 버튼 -->
+    <string name="button_auto_discover">자동 검색</string>
+    <string name="button_manual_setup">수동 설정</string>
+    <string name="button_start_sync">클립보드 동기화 시작</string>
+    <string name="button_stop_sync">클립보드 동기화 중지</string>
+    <string name="button_refresh">새로고침</string>
+    
+    <!-- 입력 필드 -->
+    <string name="input_mac_ip">Mac IP 주소</string>
+    <string name="input_mac_port">포트</string>
+    <string name="input_mac_ip_hint">예: 192.168.1.100</string>
+    <string name="input_mac_port_hint">8080</string>
+    
+    <!-- 메시지 -->
+    <string name="message_discovering">Mac CopyDrop을 찾는 중...</string>
+    <string name="message_connecting">연결 중...</string>
+    <string name="message_sync_running">백그라운드에서 클립보드를 동기화하고 있습니다</string>
+    <string name="message_wifi_required">Wi-Fi에 연결되어 있지 않습니다</string>
+    <string name="message_server_address_required">먼저 Mac 서버 주소를 설정해주세요</string>
+    
+    <!-- 알림 -->
+    <string name="notification_title">CopyDrop</string>
+    <string name="notification_sync_preparing">클립보드 동기화 준비 중...</string>
+    <string name="notification_connected">Mac과 연결됨</string>
+    <string name="notification_clipboard_sent">클립보드 전송됨</string>
+    <string name="notification_clipboard_received">클립보드 수신됨</string>
+    
+    <!-- 오류 메시지 -->
+    <string name="error_connection_failed">연결 실패</string>
+    <string name="error_discovery_failed">검색 실패</string>
+    <string name="error_invalid_address">올바른 IP 주소를 입력해주세요</string>
+    <string name="error_server_unreachable">서버에 연결할 수 없습니다. 주소를 확인해주세요.</string>
+</resources>

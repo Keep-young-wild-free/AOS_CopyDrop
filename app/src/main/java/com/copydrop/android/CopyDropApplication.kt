@@ -11,6 +11,8 @@ class CopyDropApplication : Application() {
     companion object {
         const val CLIPBOARD_SYNC_CHANNEL_ID = "clipboard_sync_channel"
         const val CLIPBOARD_SYNC_NOTIFICATION_ID = 1001
+        const val BLE_DISCOVERY_CHANNEL_ID = "ble_discovery_channel"
+        const val BLE_DISCOVERY_NOTIFICATION_ID = 1002
     }
     
     override fun onCreate() {
@@ -29,8 +31,18 @@ class CopyDropApplication : Application() {
                 setShowBadge(false)
             }
             
+            val bleDiscoveryChannel = NotificationChannel(
+                BLE_DISCOVERY_CHANNEL_ID,
+                "BLE 발견",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Mac을 BLE로 찾습니다"
+                setShowBadge(false)
+            }
+            
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(clipboardSyncChannel)
+            notificationManager.createNotificationChannel(bleDiscoveryChannel)
         }
     }
 }

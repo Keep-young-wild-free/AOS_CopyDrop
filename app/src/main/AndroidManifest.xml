@@ -16,6 +16,15 @@
     <!-- 백그라운드에서 실행하기 위한 권한 -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    
+    <!-- BLE 관련 권한 -->
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <!-- Android 12+ -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
 
     <application
         android:name=".CopyDropApplication"
@@ -43,6 +52,13 @@
         <!-- 클립보드 동기화 서비스 -->
         <service
             android:name=".service.ClipboardSyncService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- BLE 발견 서비스 -->
+        <service
+            android:name=".service.BleDiscoveryService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="dataSync" />

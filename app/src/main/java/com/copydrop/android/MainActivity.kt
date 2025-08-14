@@ -5,6 +5,8 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.content.Intent
 import android.os.Bundle
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -14,6 +16,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Bluetooth
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,6 +28,7 @@ import androidx.core.content.ContextCompat
 import com.copydrop.android.ui.theme.CopyDropTheme
 import com.copydrop.android.ui.viewmodel.MainViewModel
 import com.copydrop.android.service.ClipboardSyncService
+import com.copydrop.android.service.BleDiscoveryService
 
 class MainActivity : ComponentActivity() {
     
@@ -47,6 +51,12 @@ class MainActivity : ComponentActivity() {
         serviceIntent.action = ClipboardSyncService.ACTION_START_SYNC
         serviceIntent.putExtra(ClipboardSyncService.EXTRA_MAC_ADDRESS, macAddress)
         serviceIntent.putExtra(ClipboardSyncService.EXTRA_MAC_PORT, port)
+        ContextCompat.startForegroundService(this, serviceIntent)
+    }
+    
+    private fun startBleDiscoveryService() {
+        val serviceIntent = Intent(this, BleDiscoveryService::class.java)
+        serviceIntent.action = BleDiscoveryService.ACTION_START_SCAN
         ContextCompat.startForegroundService(this, serviceIntent)
     }
     
@@ -78,6 +88,24 @@ class MainActivity : ComponentActivity() {
             }
         }
         
+        // BLE 권한 체크 (Android 12+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) 
+                != PackageManager.PERMISSION_GRANTED) {
+                permissionsToRequest.add(Manifest.permission.BLUETOOTH_SCAN)
+            }
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) 
+                != PackageManager.PERMISSION_GRANTED) {
+                permissionsToRequest.add(Manifest.permission.BLUETOOTH_CONNECT)
+            }
+        }
+        
+        // 위치 권한 (BLE 스캔에 필요)
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) 
+            != PackageManager.PERMISSION_GRANTED) {
+            permissionsToRequest.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+        
         if (permissionsToRequest.isNotEmpty()) {
             requestPermissionLauncher.launch(permissionsToRequest.toTypedArray())
         }
@@ -90,6 +118,9 @@ fun MainScreen(viewModel: MainViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     var macAddressInput by remember { mutableStateOf("") }
     var macPortInput by remember { mutableStateOf("8080") }
+    
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val mainActivity = context as? MainActivity
     
     Column(
         modifier = Modifier
@@ -228,7 +259,35 @@ fun MainScreen(viewModel: MainViewModel) {
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                // 큰 원터치 연결 버튼
+                // BLE 연결 버튼
+                Button(
+                    onClick = { viewModel.startBleConnection() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.secondary
+                    ),
+                    enabled = !uiState.isBleScanning
+                ) {
+                    if (uiState.isBleScanning) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 3.dp,
+                            color = MaterialTheme.colorScheme.onSecondary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("BLE 스캔 중...", style = MaterialTheme.typography.titleMedium)
+                    } else {
+                        Icon(Icons.Outlined.Bluetooth, contentDescription = null, modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("BLE로 Mac 연결", style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // 기존 자동 연결 버튼
                 Button(
                     onClick = { viewModel.startAutoDiscovery() },
                     modifier = Modifier
@@ -247,7 +306,7 @@ fun MainScreen(viewModel: MainViewModel) {
                     } else {
                         Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(24.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Mac과 자동 연결", style = MaterialTheme.typography.titleMedium)
+                        Text("Wi-Fi로 Mac 찾기", style = MaterialTheme.typography.titleMedium)
                     }
                 }
                 

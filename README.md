@@ -5,16 +5,19 @@ Mac CopyDrop과 연동하여 Wi-Fi 환경에서 클립보드를 공유하는 안
 ## 기능
 
 - **클립보드 동기화**: Mac과 Android 간 실시간 클립보드 공유
+- **BLE 인증**: Bluetooth Low Energy를 통한 자동 인증 및 연결
+- **24시간 세션 관리**: BLE로 받은 세션키로 24시간 동안 자동 연결
 - **자동 서버 검색**: 같은 Wi-Fi 네트워크에서 Mac CopyDrop 서버 자동 검색
 - **수동 연결**: IP 주소를 직접 입력하여 연결
 - **백그라운드 동작**: 앱이 백그라운드에서도 클립보드 동기화 유지
-- **보안**: 기본적인 데이터 암호화 및 인증 지원
+- **보안**: AES-256-GCM 암호화 및 동적 키 관리
 
 ## 요구사항
 
 - Android 7.0 (API Level 24) 이상
+- Bluetooth Low Energy (BLE) 지원
 - Wi-Fi 연결
-- Mac에서 실행 중인 CopyDrop 서버
+- Mac에서 실행 중인 CopyDrop 서버 (BLE 광고 기능 포함)
 
 ## 설치 및 실행
 
@@ -36,11 +39,12 @@ cd AOS_CopyDrop
 
 3. **안드로이드 앱 실행**: CopyDrop Android 앱을 실행합니다.
 
-4. **서버 검색**: 
-   - "자동 검색" 버튼을 눌러 Mac 서버를 자동으로 찾거나
-   - Mac의 IP 주소를 직접 입력하여 "수동 설정" 사용
+4. **연결 방법 선택**: 
+   - **BLE 연결 (권장)**: "BLE로 Mac 연결" 버튼을 눌러 Bluetooth로 Mac을 찾고 자동 인증
+   - **Wi-Fi 검색**: "Wi-Fi로 Mac 찾기" 버튼을 눌러 네트워크에서 Mac 서버 자동 검색
+   - **수동 연결**: Mac의 IP 주소를 직접 입력하여 "수동 설정" 사용
 
-5. **동기화 시작**: "클립보드 동기화 시작" 버튼을 눌러 연결을 시작합니다.
+5. **동기화 시작**: 연결이 성공하면 자동으로 클립보드 동기화가 시작됩니다.
 
 6. **클립보드 공유**: 이제 Mac에서 복사한 텍스트가 Android에서 붙여넣기 가능하고, 반대도 가능합니다.
 
@@ -48,15 +52,21 @@ cd AOS_CopyDrop
 
 - **언어**: Kotlin
 - **UI**: Jetpack Compose
-- **네트워크**: Retrofit2, OkHttp3
+- **네트워크**: OkHttp3 WebSocket
+- **BLE**: Android Bluetooth Low Energy API
 - **서비스 검색**: jmDNS
 - **아키텍처**: MVVM with StateFlow
-- **보안**: AES 암호화
+- **보안**: AES-256-GCM 암호화, 동적 키 관리
 
 ## 주요 구성요소
 
+### BLE 모듈
+- `BleDiscoveryService`: BLE 스캔 및 GATT 연결을 통한 Mac 인증
+- 동적 암호화 키 주입 및 24시간 세션 관리
+
 ### 네트워크 모듈
 - `NetworkManager`: Mac 서버 검색 및 HTTP 통신 관리
+- `WebSocketManager`: WebSocket 통신 및 동적 암호화 키 관리
 - `CopyDropApi`: RESTful API 인터페이스 정의
 
 ### 서비스
@@ -79,6 +89,34 @@ cd AOS_CopyDrop
 - `ACCESS_WIFI_STATE`: Wi-Fi 상태 확인
 - `FOREGROUND_SERVICE`: 백그라운드 동기화
 - `POST_NOTIFICATIONS`: 동기화 상태 알림
+- `BLUETOOTH`: BLE 통신 (Android 11 이하)
+- `BLUETOOTH_SCAN`: BLE 스캔 (Android 12+)
+- `BLUETOOTH_CONNECT`: BLE 연결 (Android 12+)
+- `ACCESS_FINE_LOCATION`: BLE 스캔을 위한 위치 권한
+
+## BLE 인증 프로토콜
+
+### BLE 서비스 UUID
+- **서비스 UUID**: `12345678-1234-5678-9ABC-DEF012345678`
+- **특성 UUID**: `87654321-4321-6789-0ABC-DEF987654321`
+
+### 인증 데이터 형식
+Mac에서 BLE 광고하는 JSON 데이터:
+```json
+{
+  "ws": "ws://192.168.0.12:8080/ws",
+  "key_b64": "base64_encoded_32byte_key",
+  "exp": 1692153600
+}
+```
+
+### 동작 과정
+1. **BLE 스캔**: Android가 Mac의 BLE 광고를 스캔
+2. **GATT 연결**: 발견된 Mac과 GATT 연결
+3. **데이터 읽기**: 특성에서 WebSocket 주소와 암호화 키 획득
+4. **세션 저장**: 키와 만료 시각을 SharedPreferences에 저장
+5. **WebSocket 연결**: 획득한 주소로 WebSocket 연결 시작
+6. **24시간 세션**: 만료 시각까지 자동 재연결
 
 ## API 엔드포인트
 
@@ -92,7 +130,13 @@ Mac CopyDrop 서버와 통신하는 API:
 
 ## 문제 해결
 
-### 연결이 안 되는 경우
+### BLE 연결이 안 되는 경우
+1. Bluetooth가 활성화되어 있는지 확인
+2. Mac에서 BLE 광고가 활성화되어 있는지 확인
+3. 위치 권한이 허용되어 있는지 확인 (BLE 스캔에 필요)
+4. Android 12 이상에서는 BLUETOOTH_SCAN/CONNECT 권한 확인
+
+### Wi-Fi 연결이 안 되는 경우
 1. Mac과 Android가 같은 Wi-Fi 네트워크에 연결되어 있는지 확인
 2. Mac CopyDrop 서버가 실행 중인지 확인
 3. 방화벽 설정 확인
@@ -102,6 +146,7 @@ Mac CopyDrop 서버와 통신하는 API:
 1. 앱에 클립보드 접근 권한이 있는지 확인
 2. 백그라운드 앱 실행 권한 확인
 3. 배터리 최적화에서 앱 제외
+4. 세션 만료 시 BLE 재인증 필요
 
 ## 라이선스
 

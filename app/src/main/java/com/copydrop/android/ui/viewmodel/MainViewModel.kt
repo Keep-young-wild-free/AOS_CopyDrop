@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.copydrop.android.network.NetworkManager
 import com.copydrop.android.service.ClipboardSyncService
+import com.copydrop.android.service.BleDiscoveryService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -199,6 +200,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
     
     /**
+     * BLE 연결 시작
+     */
+    fun startBleConnection() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isBleScanning = true,
+                statusMessage = "BLE로 Mac을 찾는 중..."
+            )
+            
+            try {
+                val intent = Intent(getApplication(), BleDiscoveryService::class.java).apply {
+                    action = BleDiscoveryService.ACTION_START_SCAN
+                }
+                getApplication<Application>().startService(intent)
+                
+                // BLE 스캔 상태는 서비스에서 관리되므로 여기서는 시작만 알림
+                _uiState.value = _uiState.value.copy(
+                    statusMessage = "BLE 스캔이 시작되었습니다. Mac을 찾는 중..."
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isBleScanning = false,
+                    statusMessage = "BLE 스캔 실패: ${e.message}"
+                )
+            }
+        }
+    }
+    
+    /**
      * 연결 상태 새로고침
      */
     fun refreshConnectionStatus() {
@@ -226,6 +256,7 @@ data class MainUiState(
     val isDiscovering: Boolean = false,
     val isConnecting: Boolean = false,
     val isConnected: Boolean = false,
+    val isBleScanning: Boolean = false,
     val macServerAddress: String = "",
     val macServerPort: Int = 8080,
     val statusMessage: String = "Wi-Fi 연결을 확인하고 시작하세요"

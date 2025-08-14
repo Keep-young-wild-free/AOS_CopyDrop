@@ -35,7 +35,6 @@ class ClipboardSyncService : Service() {
         const val ACTION_STOP_SYNC = "stop_sync"
         const val EXTRA_MAC_ADDRESS = "mac_address"
         const val EXTRA_MAC_PORT = "mac_port"
-        const val EXTRA_KEY_B64 = "key_b64"
         const val EXTRA_SESSION_EXP = "session_exp"
     }
     
@@ -77,16 +76,14 @@ class ClipboardSyncService : Service() {
             ACTION_START_SYNC -> {
                 val macAddress = intent.getStringExtra(EXTRA_MAC_ADDRESS)
                 val macPort = intent.getIntExtra(EXTRA_MAC_PORT, 8080)
-                val keyB64 = intent.getStringExtra(EXTRA_KEY_B64)
                 val exp = intent.getLongExtra(EXTRA_SESSION_EXP, 0L)
                 val now = System.currentTimeMillis() / 1000
                 
-                if (macAddress != null && keyB64 != null && now < exp) {
-                    webSocketManager.setEncryptionKey(keyB64)
+                if (macAddress != null && now < exp) {
                     startForegroundService()
                     startSync(macAddress, macPort)
                 } else {
-                    // 세션 만료 또는 키 없음 - 재인증 필요
+                    // 세션 만료 - 재인증 필요
                     updateNotification("세션이 만료되었습니다. BLE 재인증이 필요합니다.")
                     stopSelf()
                 }
@@ -131,13 +128,11 @@ class ClipboardSyncService : Service() {
      */
     private fun restartWithSavedSession() {
         val prefs = getSharedPreferences("copydrop", MODE_PRIVATE)
-        val keyB64 = prefs.getString("session_key_b64", null)
         val exp = prefs.getLong("session_exp", 0L)
         val now = System.currentTimeMillis() / 1000
         
-        if (keyB64 != null && now < exp) {
+        if (now < exp) {
             // 유효한 세션이 있으면 자동 재연결
-            webSocketManager.setEncryptionKey(keyB64)
             // 여기서 저장된 서버 주소를 사용하거나 기본값 사용
             startSync("192.168.1.1", 8080) // 기본값, 실제로는 저장된 주소 사용
         }

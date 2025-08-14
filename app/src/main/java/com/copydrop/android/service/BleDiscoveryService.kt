@@ -16,7 +16,6 @@ import android.os.ParcelUuid
 
 class BleDiscoveryService : Service() {
     private val serviceUUID = UUID.fromString("12345678-1234-5678-9ABC-DEF012345678")
-    private val charUUID = UUID.fromString("87654321-4321-6789-0ABC-DEF987654321")
     private var gatt: BluetoothGatt? = null
     private var scanning = false
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -111,8 +110,12 @@ class BleDiscoveryService : Service() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
-                    updateNotification("Mac에 연결됨. 서비스 발견 중...")
-                    gatt.discoverServices()
+                    updateNotification("Mac 발견! Wi-Fi 검색 시작...")
+                    
+                    // BLE 연결 성공 시 Wi-Fi 검색 시작
+                    serviceScope.launch {
+                        startWifiDiscovery()
+                    }
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     updateNotification("Mac과 연결 끊김")
@@ -121,73 +124,56 @@ class BleDiscoveryService : Service() {
                 }
             }
         }
-
-        override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                val service = gatt.getService(serviceUUID)
-                val char = service?.getCharacteristic(charUUID)
+    }
+    
+    private suspend fun startWifiDiscovery() {
+        try {
+            // NetworkManager를 사용하여 Wi-Fi에서 Mac 서버 찾기
+            val networkManager = com.copydrop.android.network.NetworkManager(this@BleDiscoveryService)
+            
+            // 1단계: Bonjour/mDNS로 검색
+            updateNotification("Bonjour로 Mac 검색 중...")
+            var serverAddress = networkManager.findServerByBonjour()
+            
+            // 2단계: 브로드캐스트로 검색
+            if (serverAddress == null) {
+                updateNotification("브로드캐스트로 Mac 검색 중...")
+                serverAddress = networkManager.findServerByBroadcast()
+            }
+            
+            // 3단계: IP 스캔
+            if (serverAddress == null) {
+                updateNotification("네트워크 스캔 중...")
+                val result = networkManager.startDiscoveryWithDetails()
+                serverAddress = result.address
+            }
+            
+            if (serverAddress != null) {
+                updateNotification("Mac 발견! 클립보드 동기화 시작...")
                 
-                if (char != null) {
-                    updateNotification("데이터 읽는 중...")
-                    gatt.readCharacteristic(char)
-                } else {
-                    updateNotification("서비스 특성을 찾을 수 없음")
-                    stopSelf()
+                // 세션 정보 저장 (24시간 유효)
+                val prefs = getSharedPreferences("copydrop", MODE_PRIVATE)
+                val exp = System.currentTimeMillis() / 1000 + 24 * 60 * 60 // 24시간 후
+                prefs.edit()
+                    .putLong("session_exp", exp)
+                    .apply()
+                
+                // ClipboardSyncService 시작
+                val svcIntent = Intent(this@BleDiscoveryService, ClipboardSyncService::class.java).apply {
+                    action = ClipboardSyncService.ACTION_START_SYNC
+                    putExtra(ClipboardSyncService.EXTRA_MAC_ADDRESS, serverAddress)
+                    putExtra(ClipboardSyncService.EXTRA_MAC_PORT, 8080)
+                    putExtra(ClipboardSyncService.EXTRA_SESSION_EXP, exp)
                 }
+                startForegroundService(svcIntent)
             } else {
-                updateNotification("서비스 발견 실패: $status")
-                stopSelf()
+                updateNotification("Mac 서버를 찾을 수 없음")
             }
-        }
-
-        override fun onCharacteristicRead(
-            gatt: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic,
-            status: Int
-        ) {
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                try {
-                    val offerJson = String(characteristic.value, Charsets.UTF_8)
-                    val json = JSONObject(offerJson)
-                    
-                    val ws = json.getString("ws") // e.g. ws://192.168.0.12:8080/ws
-                    val keyB64 = json.getString("key_b64")
-                    val exp = json.getLong("exp") // epoch seconds
-
-                    // Parse IP and port
-                    val wsInfo = ws.removePrefix("ws://").removeSuffix("/ws").split(":")
-                    val ip = wsInfo[0]
-                    val port = wsInfo[1].toInt()
-
-                    // Persist key/expiry for 24h session
-                    val prefs = getSharedPreferences("copydrop", MODE_PRIVATE)
-                    prefs.edit()
-                        .putString("session_key_b64", keyB64)
-                        .putLong("session_exp", exp)
-                        .apply()
-
-                    updateNotification("인증 성공! 클립보드 동기화 시작...")
-
-                    // Launch ClipboardSyncService with address/port
-                    val svcIntent = Intent(this@BleDiscoveryService, ClipboardSyncService::class.java).apply {
-                        action = ClipboardSyncService.ACTION_START_SYNC
-                        putExtra(ClipboardSyncService.EXTRA_MAC_ADDRESS, ip)
-                        putExtra(ClipboardSyncService.EXTRA_MAC_PORT, port)
-                        putExtra(ClipboardSyncService.EXTRA_KEY_B64, keyB64)
-                        putExtra(ClipboardSyncService.EXTRA_SESSION_EXP, exp)
-                    }
-                    startForegroundService(svcIntent)
-
-                    // Done
-                    stopSelf()
-                } catch (e: Exception) {
-                    updateNotification("데이터 파싱 실패: ${e.message}")
-                    stopSelf()
-                }
-            } else {
-                updateNotification("데이터 읽기 실패: $status")
-                stopSelf()
-            }
+            
+            stopSelf()
+        } catch (e: Exception) {
+            updateNotification("Wi-Fi 검색 실패: ${e.message}")
+            stopSelf()
         }
     }
 }

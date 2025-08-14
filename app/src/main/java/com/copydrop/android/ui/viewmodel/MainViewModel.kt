@@ -37,102 +37,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
     
-    /**
-     * Mac 서버 자동 검색
-     */
-    fun startAutoDiscovery() {
-        if (!_uiState.value.isWifiConnected) {
-            _uiState.value = _uiState.value.copy(
-                statusMessage = "Wi-Fi에 연결되어 있지 않습니다"
-            )
-            return
-        }
-        
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(
-                isDiscovering = true,
-                statusMessage = "Mac CopyDrop을 찾는 중..."
-            )
-            
-            try {
-                val localIp = networkManager.getLocalIpAddress()
-                
-                // 1단계: Bonjour/mDNS로 정확한 검색 (5초)
-                _uiState.value = _uiState.value.copy(
-                    statusMessage = "🎯 Bonjour로 Mac CopyDrop 검색 중... (내 IP: $localIp)"
-                )
-                
-                val bonjourResult = networkManager.findServerByBonjour()
-                if (bonjourResult != null) {
-                    _uiState.value = _uiState.value.copy(
-                        isDiscovering = false,
-                        macServerAddress = bonjourResult,
-                        statusMessage = "✨ Mac CopyDrop 발견! $bonjourResult (Bonjour 서비스)"
-                    )
-                    return@launch
-                }
-                
-                // 2단계: UDP 브로드캐스트로 빠른 검색 (3초)
-                _uiState.value = _uiState.value.copy(
-                    statusMessage = "🔊 브로드캐스트로 Mac 찾는 중..."
-                )
-                
-                val broadcastResult = networkManager.findServerByBroadcast()
-                if (broadcastResult != null) {
-                    _uiState.value = _uiState.value.copy(
-                        isDiscovering = false,
-                        macServerAddress = broadcastResult,
-                        statusMessage = "✨ Mac 서버 발견! $broadcastResult (브로드캐스트)"
-                    )
-                    return@launch
-                }
-                
-                // 3단계: 마지막 수단으로 IP 스캔
-                _uiState.value = _uiState.value.copy(
-                    statusMessage = "🔍 주변 네트워크 스캔 중..."
-                )
-                
-                val result = networkManager.startDiscoveryWithDetails()
-                if (result.serverFound) {
-                    _uiState.value = _uiState.value.copy(
-                        isDiscovering = false,
-                        macServerAddress = result.address!!,
-                        statusMessage = "🎯 Mac 서버 발견! ${result.address}:${result.port} (${result.scannedCount}개 위치 검색)"
-                    )
-                } else {
-                    _uiState.value = _uiState.value.copy(
-                        isDiscovering = false,
-                        statusMessage = "❌ Mac 서버를 찾을 수 없음. Mac에서 CopyDrop이 실행 중이고 같은 WiFi에 연결되어 있는지 확인하거나 고급 설정을 사용하세요."
-                    )
-                }
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    isDiscovering = false,
-                    statusMessage = "검색 실패: ${e.message}"
-                )
-            }
-        }
-    }
+
     
-    /**
-     * Mac 서버 주소 수동 설정
-     */
-    fun setMacServerAddress(address: String, port: Int = 8080) {
-        if (address.isBlank()) {
-            _uiState.value = _uiState.value.copy(
-                statusMessage = "올바른 IP 주소를 입력해주세요"
-            )
-            return
-        }
-        
-        _uiState.value = _uiState.value.copy(
-            macServerAddress = address,
-            macServerPort = port,
-            statusMessage = "서버 주소가 설정되었습니다: $address:$port"
-        )
-        
-        networkManager.setMacServerAddress(address, port)
-    }
+
     
     /**
      * 클립보드 동기화 시작
@@ -253,11 +160,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
  */
 data class MainUiState(
     val isWifiConnected: Boolean = false,
-    val isDiscovering: Boolean = false,
     val isConnecting: Boolean = false,
     val isConnected: Boolean = false,
     val isBleScanning: Boolean = false,
     val macServerAddress: String = "",
     val macServerPort: Int = 8080,
-    val statusMessage: String = "Wi-Fi 연결을 확인하고 시작하세요"
+    val statusMessage: String = "Mac과 연결을 시작하세요"
 )

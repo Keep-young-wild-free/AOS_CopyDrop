@@ -13,14 +13,12 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -115,8 +113,6 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainScreen(viewModel: MainViewModel) {
     val uiState by viewModel.uiState.collectAsState()
-    var macAddressInput by remember { mutableStateOf("") }
-    var macPortInput by remember { mutableStateOf("8080") }
     
     val context = androidx.compose.ui.platform.LocalContext.current
     val mainActivity = context as? MainActivity
@@ -221,7 +217,7 @@ fun MainScreen(viewModel: MainViewModel) {
             )
         }
         
-        // Mac 서버 설정
+        // Mac 연결 버튼
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -229,72 +225,22 @@ fun MainScreen(viewModel: MainViewModel) {
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "Mac 서버 설정",
+                    text = "Mac과 연결",
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
                 
-                OutlinedTextField(
-                    value = macAddressInput,
-                    onValueChange = { macAddressInput = it },
-                    label = { Text("Mac IP 주소") },
-                    placeholder = { Text("예: 192.168.1.100") },
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true
-                )
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                OutlinedTextField(
-                    value = macPortInput,
-                    onValueChange = { macPortInput = it },
-                    label = { Text("포트") },
-                    placeholder = { Text("8080") },
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true
-                )
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                // BLE 연결 버튼
                 Button(
                     onClick = { viewModel.startBleConnection() },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.secondary
+                        containerColor = MaterialTheme.colorScheme.primary
                     ),
                     enabled = !uiState.isBleScanning
                 ) {
                     if (uiState.isBleScanning) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            strokeWidth = 3.dp,
-                            color = MaterialTheme.colorScheme.onSecondary
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("BLE 스캔 중...", style = MaterialTheme.typography.titleMedium)
-                    } else {
-                        Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(24.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("BLE로 Mac 연결", style = MaterialTheme.typography.titleMedium)
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                // 기존 자동 연결 버튼
-                Button(
-                    onClick = { viewModel.startAutoDiscovery() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    enabled = uiState.isWifiConnected && !uiState.isDiscovering
-                ) {
-                    if (uiState.isDiscovering) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(24.dp),
                             strokeWidth = 3.dp,
@@ -305,46 +251,7 @@ fun MainScreen(viewModel: MainViewModel) {
                     } else {
                         Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(24.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Wi-Fi로 Mac 찾기", style = MaterialTheme.typography.titleMedium)
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                // 고급 옵션 (접을 수 있게)
-                var showAdvanced by remember { mutableStateOf(false) }
-                
-                TextButton(
-                    onClick = { showAdvanced = !showAdvanced },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(if (showAdvanced) "고급 설정 숨기기" else "고급 설정 보기")
-                    Icon(
-                        imageVector = if (showAdvanced) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = null
-                    )
-                }
-                
-                if (showAdvanced) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Button(
-                            onClick = {
-                                val port = macPortInput.toIntOrNull() ?: 8080
-                                viewModel.setMacServerAddress(macAddressInput, port)
-                                
-                                // WebSocket 서비스 시작 (추후 자동 검색 성공 시 구현)
-                            },
-                            modifier = Modifier.weight(1f),
-                            enabled = macAddressInput.isNotBlank()
-                        ) {
-                            Icon(Icons.Default.Settings, contentDescription = null)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("수동 연결")
-                        }
+                        Text("Mac과 연결", style = MaterialTheme.typography.titleMedium)
                     }
                 }
             }
@@ -403,11 +310,6 @@ fun MainScreen(viewModel: MainViewModel) {
             }
         }
         
-        // 자동 입력 (검색된 주소가 있을 때)
-        LaunchedEffect(uiState.macServerAddress) {
-            if (uiState.macServerAddress.isNotEmpty() && macAddressInput.isEmpty()) {
-                macAddressInput = uiState.macServerAddress
-            }
-        }
+
     }
 }

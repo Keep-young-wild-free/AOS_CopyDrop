@@ -23,15 +23,8 @@ class WebSocketManager(private val context: Context) {
     private var webSocket: WebSocket? = null
     private val client = OkHttpClient.Builder().build()
     
-    // 동적으로 주입되는 32바이트 키
-    @Volatile private var encryptionKey: ByteArray = ByteArray(32)
-    
-    /**
-     * 암호화 키 설정 (Base64 문자열)
-     */
-    fun setEncryptionKey(base64: String) {
-        encryptionKey = Base64.decode(base64, Base64.DEFAULT)
-    }
+    // Mac CopyDrop과 동일한 32바이트 키 (실제 앱에서는 안전하게 관리)
+    private val encryptionKey: ByteArray = Base64.decode("REPLACE_WITH_YOUR_32B_KEY_BASE64", Base64.DEFAULT)
     
     // 연결 상태
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)

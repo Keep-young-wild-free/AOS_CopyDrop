@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.Bluetooth
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -279,7 +278,7 @@ fun MainScreen(viewModel: MainViewModel) {
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("BLE 스캔 중...", style = MaterialTheme.typography.titleMedium)
                     } else {
-                        Icon(Icons.Outlined.Bluetooth, contentDescription = null, modifier = Modifier.size(24.dp))
+                        Icon(Icons.Default.Bluetooth, contentDescription = null, modifier = Modifier.size(24.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("BLE로 Mac 연결", style = MaterialTheme.typography.titleMedium)
                     }
